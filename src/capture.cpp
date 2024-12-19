@@ -133,7 +133,25 @@ bool Capture::capture()
   if (cap_.read(bridge_.image))
   {
     ros::Time stamp = ros::Time::now() - capture_delay_;
-    bridge_.encoding = bridge_.image.channels() == 3 ? enc::BGR8 : enc::MONO8;
+    // bridge_.encoding = bridge_.image.channels() == 3 ? enc::BGR8 : enc::MONO8;
+    switch(bridge_.image.type())
+    {
+      case CV_8UC1:
+        bridge_.encoding = enc::MONO8;
+        break;
+      case CV_8UC3: // TODO : config flag to use BGR8 or RGB8?
+        bridge_.encoding = enc::BGR8;
+        break;
+      case CV_8UC4:
+        bridge_.encoding = enc::BGRA8;
+        break;
+      case CV_16UC1:
+        bridge_.encoding = enc::MONO16;
+        break;
+      default:
+        ROS_ERROR_THROTTLE(1.0, "Unsupported image type %d", bridge_.image.type());
+        return false;
+    }
     bridge_.header.stamp = stamp;
     bridge_.header.frame_id = frame_id_;
 
@@ -142,6 +160,19 @@ bool Capture::capture()
     {
       info_.height = bridge_.image.rows;
       info_.width = bridge_.image.cols;
+    }
+    else if (((info_.height != bridge_.image.rows) || (info_.width != bridge_.image.cols)) && 
+             (info_.height * info_.width == bridge_.image.rows * bridge_.image.cols))
+    {
+      ROS_INFO_ONCE("Camera resolution automatically adjusted from %dx%d to %dx%d to match camera_info",
+                    bridge_.image.cols, bridge_.image.rows, info_.width, info_.height);
+      bridge_.image = bridge_.image.reshape(1, info_.height);
+    }
+    else if (info_.height != bridge_.image.rows || info_.width != bridge_.image.cols)
+    {
+      ROS_WARN("Calibration resolution %dx%d does not match camera resolution %dx%d. "
+               "Use rescale_camera_info param for rescaling",
+               info_.width, info_.height, bridge_.image.cols, bridge_.image.rows);
     }
     else if (info_.height != bridge_.image.rows || info_.width != bridge_.image.cols)
     {
