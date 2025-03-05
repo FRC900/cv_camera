@@ -15,8 +15,8 @@ Capture::Capture(ros::NodeHandle &node, const std::string &topic_name,
     : node_(node),
       it_(node_),
       topic_name_(topic_name),
-      buffer_size_(buffer_size),
       frame_id_(frame_id),
+      buffer_size_(buffer_size),
       info_manager_(node_, camera_name),
       capture_delay_(ros::Duration(node_.param("capture_delay", 0.0)))
 {
@@ -78,12 +78,23 @@ void Capture::rescaleCameraInfo(int width, int height)
 
 void Capture::open(int32_t device_id)
 {
-  cap_.open(device_id);
-  if (!cap_.isOpened())
+  int counter = 0;
+  while (true)
   {
-    std::stringstream stream;
-    stream << "device_id" << device_id << " cannot be opened";
-    throw DeviceError(stream.str());
+    if (cap_.open(device_id))
+    {
+      break;
+    }
+    
+    if (counter >= 10)
+    {
+      std::stringstream stream;
+      stream << "device_id " << device_id << " cannot be opened";
+      throw DeviceError(stream.str());
+    }
+    ROS_WARN_STREAM("device_id " << device_id << " cannot be opened, trying again...");
+    ros::Duration(1.0).sleep();
+    counter++;
   }
   pub_ = it_.advertiseCamera(topic_name_, buffer_size_);
 
@@ -92,10 +103,21 @@ void Capture::open(int32_t device_id)
 
 void Capture::open(const std::string &device_path)
 {
-  cap_.open(device_path, cv::CAP_V4L);
-  if (!cap_.isOpened())
+  int counter = 0;
+  while (true)
   {
-    throw DeviceError("device_path " + device_path + " cannot be opened");
+    if (cap_.open(device_path, cv::CAP_V4L))
+    {
+      break;
+    }
+    
+    if (counter >= 10)
+    {
+      throw DeviceError("device_path " + device_path + " cannot be opened");
+    }
+    ROS_WARN_STREAM("device_path " << device_path << " cannot be opened, trying again...");
+    ros::Duration(1.0).sleep();
+    counter++;
   }
   pub_ = it_.advertiseCamera(topic_name_, buffer_size_);
 
@@ -139,7 +161,7 @@ bool Capture::capture()
       case CV_8UC1:
         bridge_.encoding = enc::MONO8;
         break;
-      case CV_8UC3: // TODO : config flag to use BGR8 or RGB8?
+      case CV_8UC3: // TODO : config flag to use BGR8 vs RGB8?
         bridge_.encoding = enc::BGR8;
         break;
       case CV_8UC4:
@@ -161,20 +183,20 @@ bool Capture::capture()
       info_.height = bridge_.image.rows;
       info_.width = bridge_.image.cols;
     }
-    else if (((info_.height != bridge_.image.rows) || (info_.width != bridge_.image.cols)) && 
-             (info_.height * info_.width == bridge_.image.rows * bridge_.image.cols))
+    else if (((info_.height != static_cast<unsigned>(bridge_.image.rows)) || (info_.width != static_cast<unsigned int>(bridge_.image.cols))) && 
+             (info_.height * info_.width == static_cast<unsigned int>(bridge_.image.rows * bridge_.image.cols)))
     {
       ROS_INFO_ONCE("Camera resolution automatically adjusted from %dx%d to %dx%d to match camera_info",
                     bridge_.image.cols, bridge_.image.rows, info_.width, info_.height);
       bridge_.image = bridge_.image.reshape(1, info_.height);
     }
-    else if (info_.height != bridge_.image.rows || info_.width != bridge_.image.cols)
+    else if (info_.height != static_cast<unsigned int>(bridge_.image.rows) || info_.width != static_cast<unsigned int>(bridge_.image.cols))
     {
       ROS_WARN("Calibration resolution %dx%d does not match camera resolution %dx%d. "
                "Use rescale_camera_info param for rescaling",
                info_.width, info_.height, bridge_.image.cols, bridge_.image.rows);
     }
-    else if (info_.height != bridge_.image.rows || info_.width != bridge_.image.cols)
+    else if (info_.height != static_cast<unsigned int>(bridge_.image.rows) || info_.width != static_cast<unsigned int>(bridge_.image.cols))
     {
       if (rescale_camera_info_)
       {

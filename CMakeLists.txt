@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(cv_camera)
 
+include("../cmake_modules/CMakeOpt.cmake")
+
 find_package(catkin REQUIRED COMPONENTS
   image_transport roscpp cv_bridge sensor_msgs nodelet camera_info_manager roslint)
 
